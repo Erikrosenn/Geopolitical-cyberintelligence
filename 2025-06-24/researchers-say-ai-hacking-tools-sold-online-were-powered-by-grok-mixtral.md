@@ -8,7 +8,7 @@ tags: [cyber, geopolitics]
 
 ## TL;DR
 
-Summary generation failed.
+ Commercial AI companies have sought to build guardrails into their models for safety and security . But a parallel underground market has emerged offering to sell uncensored versions of the technology . These “WormGPTs” are usually cobbled together from open-source models and other toolsets and can generate code, search for and analyze vulnerabilities .
 
 ## Full Article
 

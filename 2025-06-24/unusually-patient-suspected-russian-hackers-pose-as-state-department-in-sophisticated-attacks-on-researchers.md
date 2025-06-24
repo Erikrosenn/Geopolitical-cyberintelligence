@@ -8,7 +8,7 @@ tags: [cyber, geopolitics]
 
 ## TL;DR
 
- Russian military expert Keir Giles was targeted by State Department impersonators who compromised his account over the weekend . A report from the University of Toronto’s Citizen Lab details a “highly sophisticated attack” that bypasses multi-factor authentication . Google's Threat Intelligence Group is releasing a related blog post on who is behind the compromise of Giles’ accounts .
+ Russian military expert Keir Giles was targeted by hackers suspected to be working on behalf of the Russian government . Report details a “novel method” the hackers used to bypass one of the most well-regarded cyber defense tools .
 
 ## Full Article
 

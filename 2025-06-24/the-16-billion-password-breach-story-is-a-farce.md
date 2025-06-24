@@ -8,7 +8,7 @@ tags: [cyber, geopolitics]
 
 ## TL;DR
 
- CyberScoop has published a report of a massive data breach that exposed more than 16 billion credentials . The report, published Friday, has been picked up and repeated across all manner of media in the past few days . Cybersecurity experts have questioned the data and analysis the assertion was based upon . Credential abuse was the top initial access vector for breaches last year .
+ CyberScoop has spent the past few days hyperventilating over reports of a massive data breach that exposed more than 16 billion credentials . The report is curiously short on anything resembling actual evidence to support its sensational claim . Cybernews published Friday has engendered eyerolls from cybersecurity experts for its extraordinary, dubious conclusions .
 
 ## Full Article
 

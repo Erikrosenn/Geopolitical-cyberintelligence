@@ -8,7 +8,7 @@ tags: [cyber, geopolitics]
 
 ## TL;DR
 
- Four members of the notorious cybercriminal group REvil were found guilty of financial fraud and computer crimes targeting primarily American victims . They were released after a Russian court determined their sentence would amount to time already served . The four men — Andrey Bessonov, Mikhail Golovachuk, Roman Muromsky, and Dmitry Korotayev — all admitted guilt .
+ Four members of notorious cybercriminal group REvil were found guilty of financial fraud and computer crimes targeting primarily American victims . They were released after a Russian court determined their sentence would amount to time already served . The men admitted guilt and have been held in pretrial detention since their early 2022 arrests .
 
 ## Full Article
 

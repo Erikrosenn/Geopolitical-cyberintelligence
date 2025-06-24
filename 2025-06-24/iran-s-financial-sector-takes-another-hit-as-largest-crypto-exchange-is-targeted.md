@@ -8,7 +8,7 @@ tags: [cyber, geopolitics]
 
 ## TL;DR
 
- A pro-Israel hacktivist group stole more than $90 million from Iran's largest cryptocurrency exchange . The attack marks the second attack on Iran’s financial systems in as many days . The group that self identifies as Gonjeshe Darande claimed responsibility for the attack on Nobitex .
+ A pro-Israel hacktivist group stole more than $90 million from Iran's largest cryptocurrency exchange . The attack marks the second attack on Iran’s financial systems in as many days . The group that self identifies as Gonjeshe Darande in Persian claimed responsibility for the attack .
 
 ## Full Article
 

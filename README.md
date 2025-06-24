@@ -1,2 +1,0 @@
-# Geopolitical-cyberintelligence
-Geopolitical cyberintelligence blog

@@ -7,7 +7,7 @@ tags: [cyber, geopolitics]
 
 ## TL;DR
 
-Summary unavailable - model failed to load.
+ Unidentified threat actors have been observed targeting publicly exposed Microsoft Exchange servers to inject malicious code into login pages that harvest their credentials . Russian cybersecurity vendor said the attacks have targeted 65 victims in 26 countries worldwide .
 
 ## Full Article
 

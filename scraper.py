@@ -36,7 +36,7 @@ def get_article_content(url):
 
 # Load once at the top of your script
 try:
-    summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+    summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
     print("✓ Summarization model loaded successfully")
 except Exception as e:
     print(f"Error loading summarization model: {e}")
@@ -88,11 +88,19 @@ def git_push():
     try:
         subprocess.run(["git", "add", "."], check=True)
         subprocess.run(["git", "commit", "-m", f"📰 Auto-update {datetime.now().strftime('%Y-%m-%d %H:%M')}"], check=True)
-        subprocess.run(["git", "push"], check=True)
+        
+        # Try to pull first to avoid conflicts
+        try:
+            subprocess.run(["git", "pull", "origin", "main"], check=True)
+            print("✓ Pulled latest changes from remote")
+        except subprocess.CalledProcessError:
+            print("⚠️ Pull failed, trying to push anyway...")
+        
+        subprocess.run(["git", "push", "origin", "main"], check=True)
         print("✅ Blog posts pushed to GitHub.")
     except subprocess.CalledProcessError as e:
         print(f"❌ Git push failed: {e}")
-        print("Make sure you're authenticated and have changes to commit.")
+        print("Try running 'git pull origin main' manually, then 'git push origin main'")
 
 def main():
     url = "https://thehackernews.com/"

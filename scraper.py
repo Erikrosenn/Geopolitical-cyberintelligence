@@ -436,6 +436,24 @@ def process_article(article, processed_articles):
         }
     return None
 
+
+
+def save_tldr_digest(tldr_list, date_str):
+    """Save all TLDRs into a daily digest markdown file"""
+    try:
+        os.makedirs(date_str, exist_ok=True)
+        digest_path = os.path.join(date_str, f"{date_str}_TLDR.md")
+        with open(digest_path, "w", encoding="utf-8") as f:
+            f.write(f"# 📰 {date_str} CyberIntel TL;DR Digest\n\n")
+            for entry in tldr_list:
+                f.write(f"## {entry['title']}\n")
+                f.write(f"{entry['summary']}\n\n")
+                f.write(f"[🔗 Read full article]({entry['link']})\n\n---\n\n")
+        print(f"📄 Saved daily TL;DR digest: {digest_path}")
+    except Exception as e:
+        print(f"❌ Failed to save TL;DR digest: {e}")
+
+
 def git_push():
     """Optimized git operations"""
     try:
@@ -523,6 +541,7 @@ def main(debug=False):
     print(f"   - Successfully saved: {len(successful_saves)}")
     
     if successful_saves:
+        save_tldr_digest(successful_saves, datetime.now().strftime("%Y-%m-%d"))
         print("\n🚀 Pushing to GitHub...")
         git_push()
     else:

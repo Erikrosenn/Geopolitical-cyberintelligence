@@ -55,7 +55,6 @@ NEWS_SOURCES = {
     },
 }
 
-
 # Global variables for lazy loading
 _summarizer = None
 _session = None
@@ -66,7 +65,6 @@ def get_session():
     if _session is None:
         _session = requests.Session()
         _session.headers.update(HEADERS)
-        # Connection pooling for better performance
         adapter = requests.adapters.HTTPAdapter(
             pool_connections=10, 
             pool_maxsize=20,
@@ -75,7 +73,6 @@ def get_session():
         _session.mount('http://', adapter)
         _session.mount('https://', adapter)
     return _session
-
 
 def get_summarizer():
     """Lazy load summarizer only when needed"""
@@ -146,7 +143,6 @@ def clean_and_truncate_text(text, max_length=1500):
     """Clean and truncate text efficiently"""
     if not text:
         return ""
-    # Remove extra whitespace in one pass
     text = ' '.join(text.split())
     return text[:max_length] if len(text) > max_length else text
 
@@ -162,7 +158,6 @@ def get_article_content(url, content_selectors, timeout=10):
         # Try multiple content selectors
         article_div = None
         for selector in content_selectors:
-            # Handle different selector types
             if selector.startswith('.'):
                 article_div = soup.find(class_=selector[1:])
             elif selector.startswith('div.'):
@@ -192,7 +187,6 @@ def get_article_content(url, content_selectors, timeout=10):
         # Extract text more efficiently
         paragraphs = article_div.find_all("p")
         if not paragraphs:
-            # Try to get any text content
             text = article_div.get_text().strip()
             return text if len(text) > 100 else None
             
@@ -210,7 +204,6 @@ def summarize_text(text):
     
     summarizer = get_summarizer()
     
-    # If model failed to load, use simple summarization
     if summarizer is False:
         return simple_summarize(text)
     
@@ -232,7 +225,6 @@ def save_as_markdown(title, date_str, url, summary, full_content, source):
         os.makedirs(date_str, exist_ok=True)
         filename = f"{date_str}/{slugify(title)}.md"
         
-        # Check if file already exists
         if os.path.exists(filename):
             return False
         
@@ -264,7 +256,6 @@ def debug_scraping(source_name, config):
         
         soup = BeautifulSoup(response.text, "html.parser")
         
-        # Try each article selector and report results
         articles_found = []
         for i, selector in enumerate(config["article_selectors"]):
             print(f"  Trying selector {i+1}: {selector}")
@@ -314,7 +305,6 @@ def scrape_source(source_name, config, debug=False):
             print(f"❌ Failed to fetch {source_name}: {e}")
             return []
         
-        # Try multiple article selectors
         articles = []
         for selector in config["article_selectors"]:
             if selector.startswith("div."):
@@ -332,7 +322,6 @@ def scrape_source(source_name, config, debug=False):
             if articles:
                 break
         
-        # Fallback
         if not articles:
             articles = soup.find_all("article")[:15] or soup.find_all("div", class_="post")[:15]
     
@@ -341,10 +330,8 @@ def scrape_source(source_name, config, debug=False):
     articles_found = []
     processed_count = 0
     
-    # Process more articles to get better results
-    for article in articles[:15]:  # Increased from 8 to 15
+    for article in articles[:15]:
         try:
-            # Try multiple title selectors
             title_elem = None
             for title_selector in config["title_selectors"]:
                 if title_selector.startswith("h"):
@@ -354,10 +341,8 @@ def scrape_source(source_name, config, debug=False):
                 if title_elem:
                     break
             
-            # Try to find link
             link_elem = article.find("a")
             if not link_elem and title_elem:
-                # Sometimes the title itself is the link
                 link_elem = title_elem.find("a") or title_elem.find_parent("a")
             
             if not title_elem or not link_elem:
@@ -369,12 +354,11 @@ def scrape_source(source_name, config, debug=False):
             if not title or not link:
                 continue
             
-            # More lenient keyword check - check title and first bit of content
+            # Keyword check
             title_lower = title.lower()
             has_keyword = any(keyword.lower() in title_lower for keyword in KEYWORDS)
             
             if not has_keyword:
-                # Try to get a snippet of content for additional keyword checking
                 content_snippet = ""
                 snippet_elem = article.find("p") or article.find("div", class_="excerpt")
                 if snippet_elem:
@@ -410,7 +394,7 @@ def scrape_source(source_name, config, debug=False):
     return articles_found
 
 def process_article(article, processed_articles):
-    """Process a single article (for parallel processing)"""
+    """Process a single article (for parallel processing) - FIXED VERSION"""
     url_hash = get_article_hash(article['link'])
     if url_hash in processed_articles:
         return None
@@ -429,30 +413,37 @@ def process_article(article, processed_articles):
     
     if save_as_markdown(article['title'], today, article['link'], summary, content, article['source']):
         processed_articles.add(url_hash)
+        # FIXED: Return all necessary data including the link
         return {
-            'title': article['title'][:50] + "..." if len(article['title']) > 50 else article['title'],
+            'title': article['title'],
             'source': article['source'],
-            'summary': summary[:100] + "..." if len(summary) > 100 else summary
+            'link': article['link'],  # This was missing!
+            'summary': summary
         }
     return None
 
-
-
 def save_tldr_digest(tldr_list, date_str):
-    """Save all TLDRs into a daily digest markdown file"""
+    """Save all TLDRs into a daily digest markdown file - FIXED VERSION"""
     try:
         os.makedirs(date_str, exist_ok=True)
         digest_path = os.path.join(date_str, f"{date_str}_TLDR.md")
         with open(digest_path, "w", encoding="utf-8") as f:
             f.write(f"# 📰 {date_str} CyberIntel TL;DR Digest\n\n")
-            for entry in tldr_list:
-                f.write(f"## {entry['title']}\n")
-                f.write(f"{entry['summary']}\n\n")
-                f.write(f"[🔗 Read full article]({entry['link']})\n\n---\n\n")
-        print(f"📄 Saved daily TL;DR digest: {digest_path}")
+            f.write(f"*Auto-generated cybersecurity news digest*\n\n")
+            
+            if not tldr_list:
+                f.write("No new articles found today.\n\n")
+            else:
+                for i, entry in enumerate(tldr_list, 1):
+                    f.write(f"## {i}. {entry['title']}\n\n")
+                    f.write(f"**Source:** {entry['source']}\n\n")
+                    f.write(f"**Summary:** {entry['summary']}\n\n")
+                    f.write(f"[🔗 Read full article]({entry['link']})\n\n")
+                    f.write("---\n\n")
+                    
+        print(f"📄 Saved daily TL;DR digest with {len(tldr_list)} articles: {digest_path}")
     except Exception as e:
         print(f"❌ Failed to save TL;DR digest: {e}")
-
 
 def git_push():
     """Optimized git operations"""
@@ -478,11 +469,10 @@ def git_push():
         print(f"❌ Git operation failed: {e}")
 
 def main(debug=False):
-    """Optimized main function with debug option"""
+    """FIXED main function"""
     print("🚀 Starting improved cybersecurity news scraper...")
     get_summarizer()
     start_time = time.time()
-    
     
     # Load processed articles cache
     processed_articles = load_processed_articles()
@@ -490,12 +480,10 @@ def main(debug=False):
     # Scrape all sources
     all_articles = []
     if debug:
-        # Sequential scraping for debugging
         for name, config in NEWS_SOURCES.items():
             articles = scrape_source(name, config, debug=True)
             all_articles.extend(articles)
     else:
-        # Parallel scraping for production
         with ThreadPoolExecutor(max_workers=3) as executor:
             future_to_source = {
                 executor.submit(scrape_source, name, config): name 
@@ -511,13 +499,12 @@ def main(debug=False):
     
     if not all_articles:
         print("📝 No new articles found")
+        # Still create an empty digest
+        today = datetime.now().strftime("%Y-%m-%d")
+        save_tldr_digest([], today)
         return
     
-    # Save processed articles cache
-    save_processed_articles(processed_articles)
-
-    
-    # Process articles in parallel (limited to avoid overwhelming sites)
+    # Process articles in parallel
     successful_saves = []
     with ThreadPoolExecutor(max_workers=4) as executor:
         futures = [
@@ -529,26 +516,30 @@ def main(debug=False):
             result = future.result()
             if result:
                 successful_saves.append(result)
-                print(f"✓ [{i}/{len(all_articles)}] {result['source']}: {result['title']}")
+                print(f"✓ [{i}/{len(all_articles)}] {result['source']}: {result['title'][:50]}...")
             else:
                 print(f"⚠️ [{i}/{len(all_articles)}] Skipped article")
     
-
+    # FIXED: Save processed articles cache AFTER processing
+    save_processed_articles(processed_articles)
+    
     total_time = time.time() - start_time
     print(f"\n📊 SUMMARY ({total_time:.1f}s total):")
     print(f"   - Sources: {len(NEWS_SOURCES)}")
     print(f"   - Articles found: {len(all_articles)}")
     print(f"   - Successfully saved: {len(successful_saves)}")
     
+    # Always create a digest, even if empty
+    today = datetime.now().strftime("%Y-%m-%d")
+    save_tldr_digest(successful_saves, today)
+    
     if successful_saves:
-        save_tldr_digest(successful_saves, datetime.now().strftime("%Y-%m-%d"))
         print("\n🚀 Pushing to GitHub...")
         git_push()
     else:
-        print("\n📝 No new articles saved")
+        print("\n📝 No new articles saved, but digest created")
 
 if __name__ == "__main__":
-    # Add debug flag for troubleshooting
     import sys
     debug_mode = "--debug" in sys.argv
     main(debug=debug_mode)

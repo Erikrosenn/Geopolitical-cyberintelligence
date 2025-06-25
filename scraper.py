@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
 import hashlib
 from transformers import pipeline
+import warnings
 
 # Set environment variable to suppress Git warnings
 os.environ['SUPPRESS_HANDLE_INHERITANCE_WARNING'] = '1'
@@ -75,16 +76,15 @@ def get_session():
         _session.mount('https://', adapter)
     return _session
 
+
 def get_summarizer():
     """Lazy load summarizer only when needed"""
     global _summarizer
     if _summarizer is None:
         try:
             print("📦 Loading summarization model (one-time setup)...")
-            from transformers import pipeline
-            import warnings
             warnings.filterwarnings("ignore", category=FutureWarning)
-            _summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
+            _summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
             print("✓ Summarization model loaded")
         except ImportError as e:
             print(f"⚠️ Transformers library issue: {e}")

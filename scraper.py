@@ -473,9 +473,7 @@ def main(debug=False):
     get_summarizer()
     start_time = time.time()
     
-    # Load processed articles cache
     processed_articles = load_processed_articles()
-    
     
     all_articles = []
     if debug:

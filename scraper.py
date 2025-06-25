@@ -386,7 +386,7 @@ def scrape_source(source_name, config, debug=False):
                 
         except Exception as e:
             if debug:
-                print(f"  ⚠️ Error processing article: {e}")
+                print(f" Error processing article: {e}")
             continue
     
     print(f"✓ Found {len(articles_found)} relevant articles from {source_name}")
@@ -511,9 +511,9 @@ def main(debug=False):
             result = future.result()
             if result:
                 successful_saves.append(result)
-                print(f"✓ [{i}/{len(all_articles)}] {result['source']}: {result['title'][:50]}...")
+                print(f"[{i}/{len(all_articles)}] {result['source']}: {result['title'][:50]}...")
             else:
-                print(f"⚠️ [{i}/{len(all_articles)}] Skipped article")
+                print(f"[{i}/{len(all_articles)}] Skipped article")
     
     # FIXED: Save processed articles cache AFTER processing
     save_processed_articles(processed_articles)

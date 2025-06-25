@@ -22,7 +22,7 @@ KEYWORDS = [
     "security", "vulnerability", "exploit", "phishing", "trojan", "botnet"
 ]
 
-# Headers to avoid 403 blocks
+
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -35,7 +35,7 @@ HEADERS = {
     'Sec-Fetch-Site': 'none'
 }
 
-# Improved news sources configuration
+
 NEWS_SOURCES = {
     "thehackernews": {
         "url": "https://thehackernews.com/",
@@ -79,18 +79,18 @@ def get_summarizer():
     global _summarizer
     if _summarizer is None:
         try:
-            print("📦 Loading summarization model (one-time setup)...")
+            print(" Loading summarization model (one-time setup)...")
             warnings.filterwarnings("ignore", category=FutureWarning)
             _summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
-            print("✓ Summarization model loaded")
+            print(" Summarization model loaded")
         except ImportError as e:
-            print(f"⚠️ Transformers library issue: {e}")
-            print("💡 Try: pip install --upgrade transformers torch")
-            print("📝 Using simple text truncation instead")
+            print(f" Transformers library issue: {e}")
+            print(" Try: pip install --upgrade transformers torch")
+            print(" Using simple text truncation instead")
             _summarizer = False
         except Exception as e:
-            print(f"⚠️ Could not load summarization model: {e}")
-            print("📝 Using simple text truncation instead")
+            print(f" Could not load summarization model: {e}")
+            print(" Using simple text truncation instead")
             _summarizer = False
     return _summarizer
 
@@ -127,13 +127,12 @@ def simple_summarize(text, max_sentences=3):
     if len(sentences) <= max_sentences:
         return text[:500] + "..." if len(text) > 500 else text
     
-    # Simple scoring: prefer sentences with keywords
     scored_sentences = []
-    for sentence in sentences[:10]:  # Only check first 10 sentences
+    for sentence in sentences[:10]:  
         score = sum(1 for keyword in KEYWORDS if keyword.lower() in sentence.lower())
         scored_sentences.append((score, sentence))
     
-    # Sort by score and take top sentences
+    
     scored_sentences.sort(key=lambda x: x[0], reverse=True)
     top_sentences = [s[1] for s in scored_sentences[:max_sentences]]
     
@@ -155,7 +154,7 @@ def get_article_content(url, content_selectors, timeout=10):
         
         soup = BeautifulSoup(response.text, "html.parser")
         
-        # Try multiple content selectors
+        
         article_div = None
         for selector in content_selectors:
             if selector.startswith('.'):
@@ -170,7 +169,7 @@ def get_article_content(url, content_selectors, timeout=10):
             if article_div:
                 break
         
-        # Fallback selectors
+        
         if not article_div:
             fallback_selectors = ["main", "article", ".content", ".post-content", ".entry-content"]
             for selector in fallback_selectors:
@@ -184,7 +183,7 @@ def get_article_content(url, content_selectors, timeout=10):
         if not article_div:
             return None
         
-        # Extract text more efficiently
+        
         paragraphs = article_div.find_all("p")
         if not paragraphs:
             text = article_div.get_text().strip()
@@ -194,7 +193,7 @@ def get_article_content(url, content_selectors, timeout=10):
         return full_text if len(full_text) > 100 else None
         
     except Exception as e:
-        print(f"⚠️ Error fetching {url}: {str(e)[:50]}...")
+        print(f" Error fetching {url}: {str(e)[:50]}...")
         return None
 
 def summarize_text(text):
@@ -212,7 +211,7 @@ def summarize_text(text):
         summary = summarizer(cleaned_text, max_length=120, min_length=30, do_sample=False)
         return summary[0]['summary_text']
     except Exception as e:
-        print(f"⚠️ Model summarization failed, using fallback: {str(e)[:30]}...")
+        print(f" Model summarization failed, using fallback: {str(e)[:30]}...")
         return simple_summarize(text)
 
 def slugify(title):
@@ -241,12 +240,12 @@ def save_as_markdown(title, date_str, url, summary, full_content, source):
         
         return True
     except Exception as e:
-        print(f"⚠️ Error saving {title[:30]}...: {e}")
+        print(f" Error saving {title[:30]}...: {e}")
         return False
 
 def debug_scraping(source_name, config):
     """Debug function to understand what's happening during scraping"""
-    print(f"\n🔍 DEBUG: Scraping {source_name}...")
+    print(f"\n DEBUG: Scraping {source_name}...")
     
     try:
         session = get_session()
@@ -280,14 +279,14 @@ def debug_scraping(source_name, config):
                 break
         
         if not articles_found:
-            print("  ❌ No articles found with any selector, trying fallbacks...")
+            print("   No articles found with any selector, trying fallbacks...")
             articles_found = soup.find_all("article")[:15] or soup.find_all("div", class_="post")[:15]
             print(f"  Fallback found {len(articles_found)} articles")
         
         return articles_found, soup
         
     except Exception as e:
-        print(f"❌ Failed to fetch {source_name}: {e}")
+        print(f" Failed to fetch {source_name}: {e}")
         return [], None
 
 def scrape_source(source_name, config, debug=False):
@@ -295,14 +294,14 @@ def scrape_source(source_name, config, debug=False):
     if debug:
         articles, soup = debug_scraping(source_name, config)
     else:
-        print(f"🔍 Scraping {source_name}...")
+        print(f" Scraping {source_name}...")
         try:
             session = get_session()
             response = session.get(config["url"], timeout=10)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, "html.parser")
         except Exception as e:
-            print(f"❌ Failed to fetch {source_name}: {e}")
+            print(f" Failed to fetch {source_name}: {e}")
             return []
         
         articles = []
@@ -325,7 +324,7 @@ def scrape_source(source_name, config, debug=False):
         if not articles:
             articles = soup.find_all("article")[:15] or soup.find_all("div", class_="post")[:15]
     
-    print(f"📄 Found {len(articles)} articles")
+    print(f" Found {len(articles)} articles")
     
     articles_found = []
     processed_count = 0
@@ -417,7 +416,7 @@ def process_article(article, processed_articles):
         return {
             'title': article['title'],
             'source': article['source'],
-            'link': article['link'],  # This was missing!
+            'link': article['link'],  
             'summary': summary
         }
     return None
@@ -437,47 +436,47 @@ def save_tldr_digest(tldr_list, date_str):
                 for i, entry in enumerate(tldr_list, 1):
                     f.write(f"## {i}. {entry['title']}\n\n")
                     f.write(f"**Source:** {entry['source']}\n\n")
-                    f.write(f"**Summary:** {entry['summary']}\n\n")
+                    f.write(f"**TL;DR:** {entry['summary']}\n\n")
                     f.write(f"[🔗 Read full article]({entry['link']})\n\n")
                     f.write("---\n\n")
                     
-        print(f"📄 Saved daily TL;DR digest with {len(tldr_list)} articles: {digest_path}")
+        print(f" Saved daily TL;DR digest with {len(tldr_list)} articles: {digest_path}")
     except Exception as e:
-        print(f"❌ Failed to save TL;DR digest: {e}")
+        print(f" Failed to save TL;DR digest: {e}")
 
 def git_push():
     """Optimized git operations"""
     try:
         today = datetime.now().strftime("%Y-%m-%d")
         
-        # Check if there are any changes
+        
         result = subprocess.run(["git", "status", "--porcelain"], 
                               capture_output=True, text=True, timeout=10)
         if not result.stdout.strip():
-            print("📝 No changes to commit")
+            print(" No changes to commit")
             return
         
         subprocess.run(["git", "add", today], check=True, timeout=10)
         subprocess.run(["git", "commit", "-m", f"Auto-update {today}"], 
                       check=True, timeout=15)
         subprocess.run(["git", "push", "origin", "main"], check=True, timeout=30)
-        print("✅ Pushed to GitHub")
+        print(" Pushed to GitHub")
         
     except subprocess.TimeoutExpired:
-        print("❌ Git operation timed out")
+        print(" Git operation timed out")
     except subprocess.CalledProcessError as e:
-        print(f"❌ Git operation failed: {e}")
+        print(f" Git operation failed: {e}")
 
 def main(debug=False):
     """FIXED main function"""
-    print("🚀 Starting improved cybersecurity news scraper...")
+    print(" Starting improved cybersecurity news scraper...")
     get_summarizer()
     start_time = time.time()
     
     # Load processed articles cache
     processed_articles = load_processed_articles()
     
-    # Scrape all sources
+    
     all_articles = []
     if debug:
         for name, config in NEWS_SOURCES.items():
@@ -495,16 +494,14 @@ def main(debug=False):
                 all_articles.extend(articles)
     
     scrape_time = time.time()
-    print(f"📊 Found {len(all_articles)} relevant articles in {scrape_time - start_time:.1f}s")
+    print(f" Found {len(all_articles)} relevant articles in {scrape_time - start_time:.1f}s")
     
     if not all_articles:
-        print("📝 No new articles found")
-        # Still create an empty digest
+        print(" No new articles found")
         today = datetime.now().strftime("%Y-%m-%d")
         save_tldr_digest([], today)
         return
     
-    # Process articles in parallel
     successful_saves = []
     with ThreadPoolExecutor(max_workers=4) as executor:
         futures = [
@@ -524,20 +521,19 @@ def main(debug=False):
     save_processed_articles(processed_articles)
     
     total_time = time.time() - start_time
-    print(f"\n📊 SUMMARY ({total_time:.1f}s total):")
+    print(f"\n - SUMMARY ({total_time:.1f}s total):")
     print(f"   - Sources: {len(NEWS_SOURCES)}")
     print(f"   - Articles found: {len(all_articles)}")
     print(f"   - Successfully saved: {len(successful_saves)}")
     
-    # Always create a digest, even if empty
     today = datetime.now().strftime("%Y-%m-%d")
     save_tldr_digest(successful_saves, today)
     
     if successful_saves:
-        print("\n🚀 Pushing to GitHub...")
+        print("\n Pushing to GitHub...")
         git_push()
     else:
-        print("\n📝 No new articles saved, but digest created")
+        print("\n No new articles saved, but digest created")
 
 if __name__ == "__main__":
     import sys

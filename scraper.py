@@ -1,7 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 import subprocess
 import time
@@ -11,6 +11,8 @@ from functools import lru_cache
 import hashlib
 from transformers import pipeline
 import warnings
+import shutil
+from pathlib import Path
 
 # Set environment variable to suppress Git warnings
 os.environ['SUPPRESS_HANDLE_INHERITANCE_WARNING'] = '1'
@@ -19,9 +21,8 @@ KEYWORDS = [
     "cyberattack", "ransomware", "malware", "hack", "espionage",
     "APT", "breach", "Russia", "Ukraine", "Iran", "China",
     "Lazarus", "NSA", "military", "DDoS", "North Korea", "cyber", "Europe", "European",
-    "security", "vulnerability", "exploit", "phishing", "trojan", "botnet"
+    "security", "vulnerability", "exploit", "phishing", "trojan", "botnet", "NATO"
 ]
-
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -34,7 +35,6 @@ HEADERS = {
     'Sec-Fetch-Mode': 'navigate',
     'Sec-Fetch-Site': 'none'
 }
-
 
 NEWS_SOURCES = {
     "thehackernews": {
@@ -59,6 +59,307 @@ NEWS_SOURCES = {
 _summarizer = None
 _session = None
 
+class HierarchicalOrganizer:
+    """Manages hierarchical folder organization: Year/Month/Week/Day"""
+    
+    def __init__(self, base_path="."):
+        self.base_path = Path(base_path)
+        self.org_config_file = self.base_path / "organization_config.json"
+        self.load_config()
+    
+    def load_config(self):
+        """Load organization configuration"""
+        if self.org_config_file.exists():
+            try:
+                with open(self.org_config_file, 'r') as f:
+                    self.config = json.load(f)
+            except:
+                self.config = {}
+        else:
+            self.config = {}
+        
+        # Default config
+        self.config.setdefault('days_per_week', 7)
+        self.config.setdefault('weeks_per_month', 4)
+        self.config.setdefault('created_weeks', {})
+        self.config.setdefault('created_months', {})
+    
+    def save_config(self):
+        """Save organization configuration"""
+        try:
+            with open(self.org_config_file, 'w') as f:
+                json.dump(self.config, f, indent=2)
+        except:
+            pass
+    
+    def get_week_number(self, date):
+        """Get week number within the year"""
+        return date.isocalendar()[1]
+    
+    def get_current_paths(self, date=None):
+        """Get current hierarchical paths"""
+        if date is None:
+            date = datetime.now()
+        
+        year = date.strftime("%Y")
+        month = date.strftime("%Y-%m")
+        week = f"{year}-W{self.get_week_number(date):02d}"
+        day = date.strftime("%Y-%m-%d")
+        
+        return {
+            'year': year,
+            'month': month,
+            'week': week,
+            'day': day,
+            'year_path': self.base_path / year,
+            'month_path': self.base_path / year / month,
+            'week_path': self.base_path / year / month / week,
+            'day_path': self.base_path / year / month / week / day
+        }
+    
+    def get_storage_path(self, date=None):
+        """Get the current storage path for new articles"""
+        paths = self.get_current_paths(date)
+        
+        # Check if we need to reorganize
+        self.check_and_reorganize()
+        
+        # Ensure current day path exists
+        paths['day_path'].mkdir(parents=True, exist_ok=True)
+        
+        return str(paths['day_path'])
+    
+    def count_days_in_current_week(self, week_path):
+        """Count days in current week"""
+        if not week_path.exists():
+            return 0
+        
+        day_count = 0
+        for item in week_path.iterdir():
+            if item.is_dir() and re.match(r'\d{4}-\d{2}-\d{2}', item.name):
+                day_count += 1
+        return day_count
+    
+    def count_weeks_in_current_month(self, month_path):
+        """Count weeks in current month"""
+        if not month_path.exists():
+            return 0
+        
+        week_count = 0
+        for item in month_path.iterdir():
+            if item.is_dir() and re.match(r'\d{4}-W\d{2}', item.name):
+                week_count += 1
+        return week_count
+    
+    def create_week_summary(self, week_path):
+        """Create a weekly summary from all daily TLDRs"""
+        try:
+            weekly_articles = []
+            
+            for day_dir in week_path.iterdir():
+                if not day_dir.is_dir():
+                    continue
+                
+                tldr_file = day_dir / f"{day_dir.name}_TLDR.md"
+                if tldr_file.exists():
+                    with open(tldr_file, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                        # Extract articles from daily TLDR
+                        articles = self.extract_articles_from_tldr(content, day_dir.name)
+                        weekly_articles.extend(articles)
+            
+            if weekly_articles:
+                week_summary_path = week_path / f"{week_path.name}_WEEKLY_SUMMARY.md"
+                with open(week_summary_path, 'w', encoding='utf-8') as f:
+                    f.write(f"# 📅 {week_path.name} Weekly CyberIntel Summary\n\n")
+                    f.write(f"*Weekly compilation of {len(weekly_articles)} cybersecurity articles*\n\n")
+                    
+                    # Group by day
+                    by_day = {}
+                    for article in weekly_articles:
+                        day = article['day']
+                        if day not in by_day:
+                            by_day[day] = []
+                        by_day[day].append(article)
+                    
+                    for day in sorted(by_day.keys()):
+                        f.write(f"## {day}\n\n")
+                        for i, article in enumerate(by_day[day], 1):
+                            f.write(f"### {i}. {article['title']}\n")
+                            f.write(f"**Source:** {article['source']}\n")
+                            f.write(f"**Summary:** {article['summary']}\n")
+                            f.write(f"[🔗 Read more]({article['link']})\n\n")
+                        f.write("---\n\n")
+                
+                print(f" Created weekly summary: {week_summary_path}")
+                return True
+        except Exception as e:
+            print(f" Failed to create weekly summary: {e}")
+            return False
+    
+    def create_month_summary(self, month_path):
+        """Create a monthly summary from all weekly summaries"""
+        try:
+            monthly_stats = {
+                'total_articles': 0,
+                'sources': set(),
+                'weeks': []
+            }
+            
+            for week_dir in month_path.iterdir():
+                if not week_dir.is_dir() or not week_dir.name.startswith(month_path.parent.name):
+                    continue
+                
+                week_summary = week_dir / f"{week_dir.name}_WEEKLY_SUMMARY.md"
+                if week_summary.exists():
+                    with open(week_summary, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                        # Count articles and sources
+                        article_count = content.count('### ')
+                        sources = re.findall(r'\*\*Source:\*\* ([^\n]+)', content)
+                        
+                        monthly_stats['total_articles'] += article_count
+                        monthly_stats['sources'].update(sources)
+                        monthly_stats['weeks'].append({
+                            'week': week_dir.name,
+                            'articles': article_count
+                        })
+            
+            if monthly_stats['total_articles'] > 0:
+                month_summary_path = month_path / f"{month_path.name}_MONTHLY_SUMMARY.md"
+                with open(month_summary_path, 'w', encoding='utf-8') as f:
+                    f.write(f"# 📊 {month_path.name} Monthly CyberIntel Report\n\n")
+                    f.write(f"## Summary Statistics\n\n")
+                    f.write(f"- **Total Articles:** {monthly_stats['total_articles']}\n")
+                    f.write(f"- **Unique Sources:** {len(monthly_stats['sources'])}\n")
+                    f.write(f"- **Weeks Covered:** {len(monthly_stats['weeks'])}\n\n")
+                    
+                    f.write(f"## Weekly Breakdown\n\n")
+                    for week_data in monthly_stats['weeks']:
+                        f.write(f"- **{week_data['week']}:** {week_data['articles']} articles\n")
+                    
+                    f.write(f"\n## Sources\n\n")
+                    for source in sorted(monthly_stats['sources']):
+                        f.write(f"- {source}\n")
+                    
+                    f.write(f"\n---\n*Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n")
+                
+                print(f" Created monthly summary: {month_summary_path}")
+                return True
+        except Exception as e:
+            print(f" Failed to create monthly summary: {e}")
+            return False
+    
+    def extract_articles_from_tldr(self, content, day):
+        """Extract article information from TLDR content"""
+        articles = []
+        
+        # Split by article sections
+        sections = re.split(r'## \d+\.', content)[1:]  # Skip the header
+        
+        for section in sections:
+            try:
+                lines = section.strip().split('\n')
+                title = lines[0].strip()
+                
+                source = ""
+                summary = ""
+                link = ""
+                
+                for line in lines:
+                    if line.startswith('**Source:**'):
+                        source = line.replace('**Source:**', '').strip()
+                    elif line.startswith('**TL;DR:**'):
+                        summary = line.replace('**TL;DR:**', '').strip()
+                    elif line.startswith('[🔗'):
+                        link_match = re.search(r'\((.*?)\)', line)
+                        if link_match:
+                            link = link_match.group(1)
+                
+                if title and source and summary:
+                    articles.append({
+                        'title': title,
+                        'source': source,
+                        'summary': summary,
+                        'link': link,
+                        'day': day
+                    })
+            except:
+                continue
+        
+        return articles
+    
+    def check_and_reorganize(self):
+        """Check if reorganization is needed and perform it"""
+        paths = self.get_current_paths()
+        
+        # Check if we need to create a weekly folder
+        if paths['week_path'].exists():
+            day_count = self.count_days_in_current_week(paths['week_path'])
+            
+            # If we have 7 days, create weekly summary
+            if day_count >= self.config['days_per_week']:
+                week_key = paths['week']
+                if week_key not in self.config['created_weeks']:
+                    if self.create_week_summary(paths['week_path']):
+                        self.config['created_weeks'][week_key] = True
+                        print(f" Week {paths['week']} completed with {day_count} days")
+        
+        # Check if we need to create a monthly folder
+        if paths['month_path'].exists():
+            week_count = self.count_weeks_in_current_month(paths['month_path'])
+            
+            # If we have 4+ weeks, create monthly summary
+            if week_count >= self.config['weeks_per_month']:
+                month_key = paths['month']
+                if month_key not in self.config['created_months']:
+                    if self.create_month_summary(paths['month_path']):
+                        self.config['created_months'][month_key] = True
+                        print(f"📊 Month {paths['month']} completed with {week_count} weeks")
+        
+        self.save_config()
+    
+    def get_legacy_daily_folders(self):
+        """Find all legacy daily folders (YYYY-MM-DD format) in root"""
+        legacy_folders = []
+        
+        for item in self.base_path.iterdir():
+            if item.is_dir() and re.match(r'\d{4}-\d{2}-\d{2}', item.name):
+                legacy_folders.append(item)
+        
+        return legacy_folders
+    
+    def migrate_legacy_structure(self):
+        """Migrate existing YYYY-MM-DD folders to new hierarchical structure"""
+        legacy_folders = self.get_legacy_daily_folders()
+        
+        if not legacy_folders:
+            return
+        
+        print(f" Found {len(legacy_folders)} legacy folders to migrate...")
+        
+        for folder in legacy_folders:
+            try:
+                # Parse date from folder name
+                date = datetime.strptime(folder.name, '%Y-%m-%d')
+                paths = self.get_current_paths(date)
+                
+                # Create target directory structure
+                paths['day_path'].parent.mkdir(parents=True, exist_ok=True)
+                
+                # Move folder to new location
+                if not paths['day_path'].exists():
+                    shutil.move(str(folder), str(paths['day_path']))
+                    print(f" Migrated {folder.name} → {paths['day_path']}")
+                else:
+                    print(f" Target already exists for {folder.name}")
+                    
+            except Exception as e:
+                print(f" Failed to migrate {folder.name}: {e}")
+        
+        print(" Migration completed!")
+
+# Rest of the existing functions remain the same...
 def get_session():
     """Lazy load requests session with connection pooling"""
     global _session
@@ -132,7 +433,6 @@ def simple_summarize(text, max_sentences=3):
         score = sum(1 for keyword in KEYWORDS if keyword.lower() in sentence.lower())
         scored_sentences.append((score, sentence))
     
-    
     scored_sentences.sort(key=lambda x: x[0], reverse=True)
     top_sentences = [s[1] for s in scored_sentences[:max_sentences]]
     
@@ -154,7 +454,6 @@ def get_article_content(url, content_selectors, timeout=10):
         
         soup = BeautifulSoup(response.text, "html.parser")
         
-        
         article_div = None
         for selector in content_selectors:
             if selector.startswith('.'):
@@ -169,7 +468,6 @@ def get_article_content(url, content_selectors, timeout=10):
             if article_div:
                 break
         
-        
         if not article_div:
             fallback_selectors = ["main", "article", ".content", ".post-content", ".entry-content"]
             for selector in fallback_selectors:
@@ -182,7 +480,6 @@ def get_article_content(url, content_selectors, timeout=10):
         
         if not article_div:
             return None
-        
         
         paragraphs = article_div.find_all("p")
         if not paragraphs:
@@ -218,19 +515,18 @@ def slugify(title):
     """Fast slugify function"""
     return re.sub(r'[^a-zA-Z0-9]+', '-', title.lower())[:50].strip('-')
 
-def save_as_markdown(title, date_str, url, summary, full_content, source):
-    """Optimized markdown saving"""
+def save_as_markdown(title, storage_path, url, summary, full_content, source):
+    """Save article as markdown in hierarchical structure"""
     try:
-        os.makedirs(date_str, exist_ok=True)
-        filename = f"{date_str}/{slugify(title)}.md"
+        filename = Path(storage_path) / f"{slugify(title)}.md"
         
-        if os.path.exists(filename):
+        if filename.exists():
             return False
         
         with open(filename, "w", encoding="utf-8") as f:
             f.write(f"---\n"
                    f"title: \"{title}\"\n"
-                   f"date: {date_str}\n"
+                   f"date: {datetime.now().strftime('%Y-%m-%d')}\n"
                    f"source: {url}\n"
                    f"publisher: {source}\n"
                    f"tags: [cyber, geopolitics]\n"
@@ -243,86 +539,38 @@ def save_as_markdown(title, date_str, url, summary, full_content, source):
         print(f" Error saving {title[:30]}...: {e}")
         return False
 
-def debug_scraping(source_name, config):
-    """Debug function to understand what's happening during scraping"""
-    print(f"\n DEBUG: Scraping {source_name}...")
+def scrape_source(source_name, config, debug=False):
+    """Improved source scraping with better debugging"""
+    print(f" Scraping {source_name}...")
     
     try:
         session = get_session()
         response = session.get(config["url"], timeout=10)
         response.raise_for_status()
-        print(f"✓ Successfully fetched {source_name} (Status: {response.status_code})")
-        
         soup = BeautifulSoup(response.text, "html.parser")
-        
-        articles_found = []
-        for i, selector in enumerate(config["article_selectors"]):
-            print(f"  Trying selector {i+1}: {selector}")
-            
-            if selector.startswith("div."):
-                selector_class = selector.replace("div.", "")
-                articles = soup.find_all("div", class_=selector_class)
-            elif selector.startswith("article"):
-                if "." in selector:
-                    selector_class = selector.replace("article.", "")
-                    articles = soup.find_all("article", class_=selector_class)
-                else:
-                    articles = soup.find_all("article")
-            else:
-                articles = soup.select(selector)
-            
-            print(f"    Found {len(articles)} elements")
-            
-            if articles:
-                articles_found = articles
-                print(f"    ✓ Using this selector")
-                break
-        
-        if not articles_found:
-            print("   No articles found with any selector, trying fallbacks...")
-            articles_found = soup.find_all("article")[:15] or soup.find_all("div", class_="post")[:15]
-            print(f"  Fallback found {len(articles_found)} articles")
-        
-        return articles_found, soup
-        
     except Exception as e:
         print(f" Failed to fetch {source_name}: {e}")
-        return [], None
-
-def scrape_source(source_name, config, debug=False):
-    """Improved source scraping with better debugging"""
-    if debug:
-        articles, soup = debug_scraping(source_name, config)
-    else:
-        print(f" Scraping {source_name}...")
-        try:
-            session = get_session()
-            response = session.get(config["url"], timeout=10)
-            response.raise_for_status()
-            soup = BeautifulSoup(response.text, "html.parser")
-        except Exception as e:
-            print(f" Failed to fetch {source_name}: {e}")
-            return []
-        
-        articles = []
-        for selector in config["article_selectors"]:
-            if selector.startswith("div."):
-                selector_class = selector.replace("div.", "")
-                articles = soup.find_all("div", class_=selector_class)
-            elif selector.startswith("article"):
-                if "." in selector:
-                    selector_class = selector.replace("article.", "")
-                    articles = soup.find_all("article", class_=selector_class)
-                else:
-                    articles = soup.find_all("article")
+        return []
+    
+    articles = []
+    for selector in config["article_selectors"]:
+        if selector.startswith("div."):
+            selector_class = selector.replace("div.", "")
+            articles = soup.find_all("div", class_=selector_class)
+        elif selector.startswith("article"):
+            if "." in selector:
+                selector_class = selector.replace("article.", "")
+                articles = soup.find_all("article", class_=selector_class)
             else:
-                articles = soup.select(selector)
-            
-            if articles:
-                break
+                articles = soup.find_all("article")
+        else:
+            articles = soup.select(selector)
         
-        if not articles:
-            articles = soup.find_all("article")[:15] or soup.find_all("div", class_="post")[:15]
+        if articles:
+            break
+    
+    if not articles:
+        articles = soup.find_all("article")[:15] or soup.find_all("div", class_="post")[:15]
     
     print(f" Found {len(articles)} articles")
     
@@ -381,19 +629,17 @@ def scrape_source(source_name, config, debug=False):
             })
             
             processed_count += 1
-            if debug:
-                print(f"  ✓ Article {processed_count}: {title[:50]}...")
                 
         except Exception as e:
             if debug:
                 print(f" Error processing article: {e}")
             continue
     
-    print(f"✓ Found {len(articles_found)} relevant articles from {source_name}")
+    print(f" Found {len(articles_found)} relevant articles from {source_name}")
     return articles_found
 
-def process_article(article, processed_articles):
-    """Process a single article (for parallel processing) - FIXED VERSION"""
+def process_article(article, processed_articles, storage_path):
+    """Process a single article with hierarchical storage"""
     url_hash = get_article_hash(article['link'])
     if url_hash in processed_articles:
         return None
@@ -408,11 +654,8 @@ def process_article(article, processed_articles):
     else:
         summary = content[:200] + "..." if len(content) > 200 else content
     
-    today = datetime.now().strftime("%Y-%m-%d")
-    
-    if save_as_markdown(article['title'], today, article['link'], summary, content, article['source']):
+    if save_as_markdown(article['title'], storage_path, article['link'], summary, content, article['source']):
         processed_articles.add(url_hash)
-        # FIXED: Return all necessary data including the link
         return {
             'title': article['title'],
             'source': article['source'],
@@ -421,13 +664,14 @@ def process_article(article, processed_articles):
         }
     return None
 
-def save_tldr_digest(tldr_list, date_str):
-    """Save all TLDRs into a daily digest markdown file - FIXED VERSION"""
+def save_tldr_digest(tldr_list, storage_path):
+    """Save TL;DR digest in hierarchical structure"""
     try:
-        os.makedirs(date_str, exist_ok=True)
-        digest_path = os.path.join(date_str, f"{date_str}_TLDR.md")
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        digest_path = Path(storage_path) / f"{date_str}_TLDR.md"
+        
         with open(digest_path, "w", encoding="utf-8") as f:
-            f.write(f"# 📰 {date_str} CyberIntel TL;DR Digest\n\n")
+            f.write(f"#  {date_str} CyberIntel TL;DR Digest\n\n")
             f.write(f"*Auto-generated cybersecurity news digest*\n\n")
             
             if not tldr_list:
@@ -440,36 +684,45 @@ def save_tldr_digest(tldr_list, date_str):
                     f.write(f"[🔗 Read full article]({entry['link']})\n\n")
                     f.write("---\n\n")
                     
-        print(f" Saved daily TL;DR digest with {len(tldr_list)} articles: {digest_path}")
+        print(f"Saved daily TL;DR digest with {len(tldr_list)} articles: {digest_path}")
     except Exception as e:
-        print(f" Failed to save TL;DR digest: {e}")
+        print(f"Failed to save TL;DR digest: {e}")
 
 def git_push():
     """Optimized git operations"""
     try:
-        today = datetime.now().strftime("%Y-%m-%d")
-        
-        
         result = subprocess.run(["git", "status", "--porcelain"], 
                               capture_output=True, text=True, timeout=10)
         if not result.stdout.strip():
-            print(" No changes to commit")
+            print("No changes to commit")
             return
         
-        subprocess.run(["git", "add", today], check=True, timeout=10)
-        subprocess.run(["git", "commit", "-m", f"Auto-update {today}"], 
+        subprocess.run(["git", "add", "."], check=True, timeout=10)
+        subprocess.run(["git", "commit", "-m", f"Auto-update {datetime.now().strftime('%Y-%m-%d %H:%M')}"], 
                       check=True, timeout=15)
         subprocess.run(["git", "push", "origin", "main"], check=True, timeout=30)
         print(" Pushed to GitHub")
         
     except subprocess.TimeoutExpired:
-        print(" Git operation timed out")
+        print("Git operation timed out")
     except subprocess.CalledProcessError as e:
-        print(f" Git operation failed: {e}")
+        print(f"Git operation failed: {e}")
 
-def main(debug=False):
-    """FIXED main function"""
-    print(" Starting improved cybersecurity news scraper...")
+def main(debug=False, migrate=False):
+    """Enhanced main function with hierarchical organization"""
+    print(" Starting enhanced cybersecurity news scraper with hierarchical organization...")
+    
+    # Initialize hierarchical organizer
+    organizer = HierarchicalOrganizer()
+    
+    # Migrate legacy structure if requested
+    if migrate:
+        organizer.migrate_legacy_structure()
+    
+    # Get current storage path
+    storage_path = organizer.get_storage_path()
+    print(f" Storing articles in: {storage_path}")
+    
     get_summarizer()
     start_time = time.time()
     
@@ -492,18 +745,17 @@ def main(debug=False):
                 all_articles.extend(articles)
     
     scrape_time = time.time()
-    print(f" Found {len(all_articles)} relevant articles in {scrape_time - start_time:.1f}s")
+    print(f"🔍 Found {len(all_articles)} relevant articles in {scrape_time - start_time:.1f}s")
     
     if not all_articles:
-        print(" No new articles found")
-        today = datetime.now().strftime("%Y-%m-%d")
-        save_tldr_digest([], today)
+        print("📭 No new articles found")
+        save_tldr_digest([], storage_path)
         return
     
     successful_saves = []
     with ThreadPoolExecutor(max_workers=4) as executor:
         futures = [
-            executor.submit(process_article, article, processed_articles)
+            executor.submit(process_article, article, processed_articles, storage_path)
             for article in all_articles
         ]
         
@@ -513,9 +765,9 @@ def main(debug=False):
                 successful_saves.append(result)
                 print(f"[{i}/{len(all_articles)}] {result['source']}: {result['title'][:50]}...")
             else:
-                print(f"[{i}/{len(all_articles)}] Skipped article")
+                print(f"[{i}/{len(all_articles)}]  Skipped article")
     
-    # FIXED: Save processed articles cache AFTER processing
+    # Save processed articles cache AFTER processing
     save_processed_articles(processed_articles)
     
     total_time = time.time() - start_time
@@ -523,11 +775,15 @@ def main(debug=False):
     print(f"   - Sources: {len(NEWS_SOURCES)}")
     print(f"   - Articles found: {len(all_articles)}")
     print(f"   - Successfully saved: {len(successful_saves)}")
+    print(f"   - Storage path: {storage_path}")
     
-    today = datetime.now().strftime("%Y-%m-%d")
-    save_tldr_digest(successful_saves, today)
+    # Save daily digest
+    save_tldr_digest(successful_saves, storage_path)
     
-    if successful_saves:
+    # Check for reorganization after saving new content
+    organizer.check_and_reorganize()
+    
+    if successful_saves or organizer.get_legacy_daily_folders():
         print("\n Pushing to GitHub...")
         git_push()
     else:
@@ -536,4 +792,5 @@ def main(debug=False):
 if __name__ == "__main__":
     import sys
     debug_mode = "--debug" in sys.argv
-    main(debug=debug_mode)
+    migrate_mode = "--migrate" in sys.argv
+    main(debug=debug_mode, migrate=migrate_mode)
